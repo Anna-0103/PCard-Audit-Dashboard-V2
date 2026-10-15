@@ -56,7 +56,14 @@ def results(key):
     if nxt.button('Next', disabled=page >= pages, key=key + '_next'):
         state['page'] += 1
         st.rerun()
-    st.dataframe(pd.DataFrame(result['rows'], columns=result['headers']), hide_index=True, width='stretch')
+    frame = pd.DataFrame(result['rows'], columns=result['headers'])
+    date_columns = {}
+    for column in frame.columns:
+        if str(column).replace(' ', '').replace('_', '').lower() in ('transactiondate', 'posteddate'):
+            # Typed dates also make header-click sorting chronological on the current page.
+            frame[column] = pd.to_datetime(frame[column], format='%m/%d/%Y %H:%M:%S', errors='coerce')
+            date_columns[column] = st.column_config.DatetimeColumn(str(column), format='YYYY-MM-DD HH:mm:ss')
+    st.dataframe(frame, hide_index=True, width='stretch', column_config=date_columns)
     if key != 'ask_result':
         with st.expander('Executed pagination SQL and bound values'):
             st.code(result['sql'], language='sql')
