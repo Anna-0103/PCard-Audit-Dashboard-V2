@@ -5,7 +5,7 @@ import sqlite3
 import time
 import pandas as pd
 import streamlit as st
-from database import PAGE_SIZE, SORT_COLUMNS, query_page, search_query, split_query, years
+from database import PAGE_SIZE, SORT_COLUMNS, query_page, search_query, years
 from gemini import DEFAULT_MODEL, generate
 
 st.set_page_config(page_title='OSU P-card Audit', page_icon='📊', layout='wide')
@@ -41,7 +41,7 @@ def results(key):
         with st.spinner('Searching the bundled database…'):
             result = query_page(state['sql'], state.get('parameters', ()), state.get('page', 1))
     except (sqlite3.Error, ValueError):
-        st.error('This query could not run safely or exceeded the 15-second limit. Try a simpler question or one of the assignment checks.')
+        st.error('This query could not run safely or exceeded the 15-second limit. Try a simpler or more specific question.')
         return
     state['page'] = result['page']
     total, page = result['total'], result['page']
@@ -57,10 +57,11 @@ def results(key):
         state['page'] += 1
         st.rerun()
     st.dataframe(pd.DataFrame(result['rows'], columns=result['headers']), hide_index=True, width='stretch')
-    with st.expander('Executed pagination SQL and bound values'):
-        st.code(result['sql'], language='sql')
-        st.code(json.dumps(result['parameters'], ensure_ascii=False), language='json')
-        st.caption('Question marks are safely bound values, in order. Counts use the same query without pagination.')
+    if key != 'ask_result':
+        with st.expander('Executed pagination SQL and bound values'):
+            st.code(result['sql'], language='sql')
+            st.code(json.dumps(result['parameters'], ensure_ascii=False), language='json')
+            st.caption('Question marks are safely bound values, in order. Counts use the same query without pagination.')
 
 try:
     year_options = available_years()
@@ -76,7 +77,7 @@ with ask:
     key = setting('GEMINI_API_KEY')
     model = setting('GEMINI_MODEL', DEFAULT_MODEL)
     if not key:
-        st.info('Natural-language questions need GEMINI_API_KEY in the private Streamlit secrets settings. Search and assignment checks below are ready to use.')
+        st.info('Natural-language questions need GEMINI_API_KEY in the private Streamlit secrets settings. The Prohibited purchases tab is ready to use.')
     with st.form('question_form'):
         question = st.text_area('Your audit question', max_chars=500)
         submitted = st.form_submit_button('Ask question', disabled=not bool(key))
@@ -94,11 +95,6 @@ with ask:
                 st.error(str(exc))
             except Exception:
                 st.error('The question could not be processed. Check your private API settings and try again.')
-    with st.expander('Run an assignment split-purchase check'):
-        kind = st.selectbox('Audit control', ['Same cardholder, vendor and day', 'Two cardholders at one vendor', 'One cardholder at two vendors'])
-        st.caption('2014 · Oklahoma State University · positive purchases · combined amount over $5,000. These checks do not call Gemini.')
-        if st.button('Run check'):
-            st.session_state['ask_result'] = dict(sql=split_query(kind), explanation=kind + ': potential exceptions only.', page=1)
     results('ask_result')
 with dashboard:
     st.subheader('Search possible prohibited purchases')

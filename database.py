@@ -1,5 +1,5 @@
 """Read-only SQLite access. No hosted database or credentials required."""
-from contextlib import contextmanager
+from contextlib import contextmanager, closing
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sqlite3
 import tempfile
 import time
@@ -53,8 +54,28 @@ def database_path():
 
 FUNCTIONS = set('abs avg coalesce count date datetime dense_rank first_value glob ifnull instr julianday lag last_value lead length like lower ltrim max min nullif printf rank replace round row_number rtrim strftime substr substring sum time total trim typeof unicode upper pcard_datetime'.split())
 
+@lru_cache(maxsize=1)
+def indexed_database_path():
+    """Build indexes in a disposable copy; keep the bundled snapshot unchanged."""
+    original = database_path()
+    target = original.with_name(original.stem + '-indexed-v1.db')
+    if target.exists():
+        return target
+    fd, name = tempfile.mkstemp(prefix='pcards-index-', suffix='.db', dir=target.parent)
+    os.close(fd)
+    try:
+        shutil.copyfile(original, name)
+        with closing(sqlite3.connect(name)) as conn:
+            conn.execute('CREATE INDEX audit_person_date ON pcards(Year, AgencyName, FullName, TransactionDate)')
+            conn.execute('CREATE INDEX audit_person_vendor_amount ON pcards(Year, AgencyName, FullName, Vendor, Amount)')
+        os.replace(name, target)
+    finally:
+        if os.path.exists(name):
+            os.unlink(name)
+    return target
+
 def authorize(action, arg1, arg2, db, source):
-    if action == sqlite3.SQLITE_SELECT:
+    if action in (sqlite3.SQLITE_SELECT, sqlite3.SQLITE_RECURSIVE):
         return sqlite3.SQLITE_OK
     # SQLite reports db=None and an empty column for COUNT(*) table reads.
     if action == sqlite3.SQLITE_READ and arg1 == 'pcards' and (db == 'main' or (db is None and arg2 == '')):
@@ -65,7 +86,7 @@ def authorize(action, arg1, arg2, db, source):
 
 @contextmanager
 def connection(path=None, timeout=15):
-    conn = sqlite3.connect(Path(path or database_path()).resolve().as_uri() + '?mode=ro', uri=True)
+    conn = sqlite3.connect(Path(path or indexed_database_path()).resolve().as_uri() + '?mode=ro', uri=True)
     conn.create_function('pcard_datetime', 1, pcard_datetime, deterministic=True)
     conn.execute('PRAGMA query_only=ON')
     conn.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, 2_000_000)
@@ -81,7 +102,7 @@ def connection(path=None, timeout=15):
 def validate_sql(sql):
     if not isinstance(sql, str) or not 1 <= len(sql) <= 20000:
         raise ValueError('Expected a SQL query of up to 20,000 characters.')
-    sql = sql.strip().removesuffix(';').strip()
+    sql = re.sub(r'\A(?:\s*--[^\n]*(?:\n|$))*', '', sql).strip().removesuffix(';').strip()
     if not re.match(r'^(SELECT|WITH)\b', sql, re.I) or not re.search(r'\bpcards\b', sql, re.I):
         raise ValueError('Use one SELECT or WITH query against pcards.')
     return sql

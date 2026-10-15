@@ -1,0 +1,134 @@
+[
+  {
+    "id": "II-1",
+    "title": "Control 1  |  User shall not spend more than $50,000 per year.",
+    "question": "Display the name and total amount spent during the year for all employees who spent more than $50,000 in 2014. Sort by the total amount spent with the larger amounts listed first.",
+    "sql": "SELECT\n    FullName,\n    ROUND(SUM(Amount), 2) AS TotalAmount\nFROM pcards\nWHERE Year = 2014\n  AND AgencyName = 'OKLAHOMA STATE UNIVERSITY'\nGROUP BY FullName\nHAVING SUM(Amount) > 50000\nORDER BY TotalAmount DESC"
+  },
+  {
+    "id": "II-2",
+    "title": "Control 2  |  User shall not spend more than $10,000 per month without approval.",
+    "question": "Display the name, total amount spent during the month and the month for all employees who spent more than $10,000 per month in 2014. Sort by month (January listed first) and then total the amount spent with the larger amounts listed first.",
+    "sql": "SELECT\n    FullName,\n    Month,\n    ROUND(SUM(Amount), 2) AS TotalAmount\nFROM pcards\nWHERE Year = 2014\n  AND AgencyName = 'OKLAHOMA STATE UNIVERSITY'\nGROUP BY FullName, Month\nHAVING SUM(Amount) > 10000\nORDER BY Month ASC, TotalAmount DESC"
+  },
+  {
+    "id": "II-3",
+    "title": "Control 3  |  User shall not spend more than $5,000 per transaction.",
+    "question": "Display all transaction details (Amount, Name, Description, Vendor, TransactionDate, PostedDate and MCC) for any transaction in 2014 that was for more than $5,000. Sort by the total transaction amount.",
+    "sql": "SELECT\n    Amount,\n    FullName AS Name,\n    Description,\n    Vendor,\n    TransactionDate,\n    PostedDate,\n    MCC\nFROM pcards\nWHERE Year = 2014\n  AND AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n  AND Amount > 5000\nORDER BY Amount ASC"
+  },
+  {
+    "id": "II-4",
+    "title": "Control 4  |  An amount more than $5,000 should not be split between two or more swipes of the card by the same person.",
+    "question": "Display all transaction details where the vendor and purchaser are the same on a specific day, there is more than one transaction for the day and the combined total of the transaction was more than $5,000. Sort them in ascending order by the TransactionDate.",
+    "sql": "SELECT p.*\nFROM pcards AS p\nJOIN (\n    SELECT FullName, Vendor, TransactionDate\n    FROM pcards\n    WHERE Year = 2014\n      AND AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n      AND Amount > 0\n    GROUP BY FullName, Vendor, TransactionDate\n    HAVING COUNT(*) > 1\n       AND SUM(Amount) > 5000\n) AS g\n  ON p.FullName = g.FullName\n AND p.Vendor = g.Vendor\n AND p.TransactionDate = g.TransactionDate\nWHERE p.Year = 2014\n  AND p.AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n  AND p.Amount > 0\nORDER BY p.TransactionDate ASC"
+  },
+  {
+    "id": "II-5",
+    "title": "Control 5  |  Purchases should not be split between two or more cardholders.",
+    "question": "To simplify, we only will consider splitting these between two people. Display all transaction information in which the combined total for a vendor on a day was more than $5,000 and there were two different cardholders who made a purchase from that vendor (make sure the query excludes people who may have made double payments). Sort them in ascending order by the TransactionDate.",
+    "sql": "SELECT p.*\nFROM pcards AS p\nJOIN (\n    SELECT\n        Vendor,\n        TransactionDate\n    FROM pcards\n    WHERE Year = 2014\n      AND AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n      AND Amount > 0\n    GROUP BY Vendor, TransactionDate\n    HAVING COUNT(*) = 2\n       AND COUNT(DISTINCT FullName) = 2\n       AND SUM(Amount) > 5000\n) AS g\n  ON p.Vendor = g.Vendor\n AND p.TransactionDate = g.TransactionDate\nWHERE p.Year = 2014\n  AND p.AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n  AND p.Amount > 0\nORDER BY p.TransactionDate ASC"
+  },
+  {
+    "id": "II-6",
+    "title": "Control 6  |  Purchases should not be split between two or more vendors.",
+    "question": "To simplify, we will only consider splitting these between two vendors. Display all transaction information in which the combined total for a person on a day was more than $5,000 and there were purchases made at two different vendors (make sure the query excludes people who may have made double payments at one vendor). Sort them in ascending order by the TransactionDate.",
+    "sql": "SELECT p.*\nFROM pcards AS p\nJOIN (\n    SELECT\n        FullName,\n        TransactionDate\n    FROM pcards\n    WHERE Year = 2014\n      AND AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n      AND Amount > 0\n    GROUP BY FullName, TransactionDate\n    HAVING COUNT(*) = 2\n       AND COUNT(DISTINCT Vendor) = 2\n       AND SUM(Amount) > 5000\n) AS g\n  ON p.FullName = g.FullName\n AND p.TransactionDate = g.TransactionDate\nWHERE p.Year = 2014\n  AND p.AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n  AND p.Amount > 0\nORDER BY p.TransactionDate ASC"
+  },
+  {
+    "id": "II-7",
+    "title": "Control 7  |  Transactions are prohibited for expenses for food and mileage while traveling. A per diem for food expenses and mileage may be claimed using a travel voucher.",
+    "question": "For the days when an employee makes a purchase using an MCC that contains the words hotel, motel, resort or inn, return all transaction details about any transactions for those employees who on those days also contain MCCs that have the words food or restaurant. Sort them in ascending order by name and then the amount.",
+    "sql": "SELECT p.*\nFROM pcards AS p\nWHERE p.Year = 2014\n  AND p.AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n  AND (\n       LOWER(p.MCC) LIKE '%food%'\n       OR LOWER(p.MCC) LIKE '%restaurant%'\n  )\n  AND EXISTS (\n      SELECT 1\n      FROM pcards AS h\n      WHERE h.Year = 2014\n        AND h.AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n        AND h.FullName = p.FullName\n        AND h.TransactionDate = p.TransactionDate\n        AND (\n             LOWER(h.MCC) LIKE '%hotel%'\n             OR LOWER(h.MCC) LIKE '%motel%'\n             OR LOWER(h.MCC) LIKE '%resort%'\n             OR LOWER(h.MCC) LIKE '%inn%'\n        )\n  )\nORDER BY p.FullName ASC, p.Amount ASC"
+  },
+  {
+    "id": "II-8",
+    "title": "Control 8  |  Student-defined internal-control test",
+    "question": "Gasoline should be purchased from Transportation Services or with the gasoline credit card provided with each University vehicle. Identify positive 2014 OSU purchases whose MCC contains “gasoline” or “service station.” Return FullName, Amount, Vendor, TransactionDate and MCC, ordered by Amount descending.",
+    "sql": "SELECT\n    FullName,\n    Amount,\n    Vendor,\n    TransactionDate,\n    MCC\nFROM pcards\nWHERE Year = 2014\n  AND AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n  AND Amount > 0\n  AND (\n       LOWER(MCC) LIKE '%gasoline%'\n       OR LOWER(MCC) LIKE '%service station%'\n  )\nORDER BY Amount DESC"
+  },
+  {
+    "id": "II-9",
+    "title": "Control 9  |  Student-defined internal-control test",
+    "question": "All U.S. mail should be sent through University Mailing. Identify positive 2014 OSU purchases whose MCC contains “mail” or “postage,” or whose Vendor contains “post office.” Return FullName, Amount, Vendor, TransactionDate and MCC, ordered by Amount descending.",
+    "sql": "SELECT\n    FullName,\n    Amount,\n    Vendor,\n    TransactionDate,\n    MCC\nFROM pcards\nWHERE Year = 2014\n  AND AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n  AND Amount > 0\n  AND (\n       LOWER(MCC) LIKE '%mail%'\n       OR LOWER(MCC) LIKE '%postage%'\n       OR LOWER(Vendor) LIKE '%post office%'\n  )\nORDER BY Amount DESC"
+  },
+  {
+    "id": "II-10",
+    "title": "Control 10  |  Student-defined internal-control test",
+    "question": "Gifts, gift cards and gift certificates are prohibited. Screen positive 2014 OSU purchases for MCC descriptions containing “gift.” Return FullName, Amount, Vendor, TransactionDate and MCC, ordered by Amount descending. This merchant-category screen requires receipt review to identify the items purchased.",
+    "sql": "SELECT\n    FullName,\n    Amount,\n    Vendor,\n    TransactionDate,\n    MCC\nFROM pcards\nWHERE Year = 2014\n  AND AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n  AND Amount > 0\n  AND LOWER(MCC) LIKE '%gift%'\nORDER BY Amount DESC"
+  },
+  {
+    "id": "II-11",
+    "title": "Control 11  |  Student-defined internal-control test",
+    "question": "Personal memberships and dues are prohibited. Screen positive 2014 OSU purchases for MCC descriptions containing “membership.” Return FullName, Amount, Vendor, TransactionDate and MCC, ordered by Amount descending. Follow-up must distinguish personal from institutional memberships.",
+    "sql": "SELECT\n    FullName,\n    Amount,\n    Vendor,\n    TransactionDate,\n    MCC\nFROM pcards\nWHERE Year = 2014\n  AND AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n  AND Amount > 0\n  AND LOWER(MCC) LIKE '%membership%'\nORDER BY Amount DESC"
+  },
+  {
+    "id": "II-12",
+    "title": "Control 12  |  Student-defined internal-control test",
+    "question": "Insurance must be processed on a requisition through Risk and Property Management. Screen positive 2014 OSU purchases for MCC descriptions containing “insurance.” Return FullName, Amount, Vendor, TransactionDate and MCC, ordered by Amount descending.",
+    "sql": "SELECT\n    FullName,\n    Amount,\n    Vendor,\n    TransactionDate,\n    MCC\nFROM pcards\nWHERE Year = 2014\n  AND AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n  AND Amount > 0\n  AND LOWER(MCC) LIKE '%insurance%'\nORDER BY Amount DESC"
+  },
+  {
+    "id": "II-13",
+    "title": "Control 13  |  Student-defined internal-control test",
+    "question": "Alcohol purchases are prohibited. Screen positive 2014 OSU purchases for MCC descriptions containing “liquor” or “alcoholic beverage.” Return FullName, Amount, Vendor, TransactionDate and MCC, ordered by Amount descending.",
+    "sql": "SELECT\n    FullName,\n    Amount,\n    Vendor,\n    TransactionDate,\n    MCC\nFROM pcards\nWHERE Year = 2014\n  AND AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n  AND Amount > 0\n  AND (\n       LOWER(MCC) LIKE '%liquor%'\n       OR LOWER(MCC) LIKE '%alcoholic beverage%'\n  )\nORDER BY Amount DESC"
+  },
+  {
+    "id": "II-14",
+    "title": "Control 14  |  Student-defined internal-control test",
+    "question": "Decorations are prohibited. Screen positive 2014 OSU transactions for Description values containing “decorat.” Return FullName, Amount, Vendor, TransactionDate, Description and MCC, ordered by Amount descending. The keyword identifies possible decorative purchases for manual review.",
+    "sql": "SELECT\n    FullName,\n    Amount,\n    Vendor,\n    TransactionDate,\n    Description,\n    MCC\nFROM pcards\nWHERE Year = 2014\n  AND AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n  AND Amount > 0\n  AND LOWER(Description) LIKE '%decorat%'\nORDER BY Amount DESC"
+  },
+  {
+    "id": "III-1",
+    "title": "Question 1  |  Benford's analysis of first digits",
+    "question": "Using OSU transactions from calendar year 2014, conduct a Benford's analysis of the first digit of transaction amounts. Exclude amounts below $1.00. The final output must be a single query showing the percentage of transactions beginning with each digit from 1 through 9, with percentages rounded to three decimal places. Use the results to assess whether the data indicate a relatively low or high fraud risk.",
+    "sql": "WITH RECURSIVE digits(d) AS (\n    VALUES(1)\n    UNION ALL\n    SELECT d + 1\n    FROM digits\n    WHERE d < 9\n),\nfirst_digits AS (\n    SELECT\n        CAST(SUBSTR(CAST(Amount AS TEXT), 1, 1) AS INTEGER) AS FirstDigit\n    FROM pcards\n    WHERE Year = 2014\n      AND AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n      AND Amount >= 1.00\n)\nSELECT\n    d AS FirstDigit,\n    ROUND(\n        100.0 * SUM(CASE WHEN FirstDigit = d THEN 1 ELSE 0 END)\n        / (SELECT COUNT(*) FROM first_digits),\n        3\n    ) AS Percentage\nFROM digits\nLEFT JOIN first_digits\n    ON FirstDigit = d\nGROUP BY d\nORDER BY d"
+  },
+  {
+    "id": "III-2",
+    "title": "Question 2  |  Potential duplicate transactions",
+    "question": "Identify possible duplicate payments in the OSU 2014 data. Treat positive charges as possible duplicates when they have the same transaction date, vendor, cardholder first initial, cardholder last name and amount; if more than two charges match, include all matching charges. Exclude returns. Return TransactionDate, Vendor, FullName and Amount, and sort in ascending order by TransactionDate and then Vendor.",
+    "sql": "WITH DuplicateGroups AS (\n    SELECT\n        TransactionDate,\n        Vendor,\n        CardholderFirstInitial,\n        CardholderLastName,\n        Amount\n    FROM pcards\n    WHERE Year = 2014\n      AND AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n      AND Amount > 0\n    GROUP BY\n        TransactionDate,\n        Vendor,\n        CardholderFirstInitial,\n        CardholderLastName,\n        Amount\n    HAVING COUNT(*) >= 2\n)\nSELECT\n    p.TransactionDate,\n    p.Vendor,\n    p.FullName,\n    p.Amount\nFROM pcards AS p\nJOIN DuplicateGroups AS d\n  ON p.TransactionDate = d.TransactionDate\n AND p.Vendor = d.Vendor\n AND p.CardholderFirstInitial = d.CardholderFirstInitial\n AND p.CardholderLastName = d.CardholderLastName\n AND p.Amount = d.Amount\nWHERE p.Year = 2014\n  AND p.AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n  AND p.Amount > 0\nORDER BY\n    p.TransactionDate,\n    p.Vendor,\n    p.FullName,\n    p.Amount"
+  },
+  {
+    "id": "III-3",
+    "title": "Question 3  |  Employees repeatedly associated with possible duplicates",
+    "question": "Using the possible duplicate population from Question 2, list each employee and the number of separate occasions on which the employee has a possible duplicate transaction. Count duplicate occasions rather than the number of transaction rows, and sort with the largest number of occasions first so the highest-risk employees can be investigated.",
+    "sql": "WITH DuplicateGroups AS (\n    SELECT\n        CardholderFirstInitial,\n        CardholderLastName,\n        FullName,\n        TransactionDate,\n        Vendor,\n        Amount\n    FROM pcards\n    WHERE Year = 2014\n      AND AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n      AND Amount > 0\n    GROUP BY\n        CardholderFirstInitial,\n        CardholderLastName,\n        FullName,\n        TransactionDate,\n        Vendor,\n        Amount\n    HAVING COUNT(*) >= 2\n)\nSELECT\n    FullName,\n    COUNT(*) AS DuplicateOccasions\nFROM DuplicateGroups\nGROUP BY FullName\nORDER BY\n    DuplicateOccasions DESC,\n    FullName ASC"
+  },
+  {
+    "id": "III-4",
+    "title": "Question 4  |  Four-digit round-number transactions",
+    "question": "Return all positive OSU transactions from 2014 with four-digit whole-dollar amounts that end in 000, ignoring cents. Include Amount, Vendor, Description and FullName. Sort in ascending order by Vendor and then FullName to identify patterns.",
+    "sql": "SELECT\n    Amount,\n    Vendor,\n    Description,\n    FullName\nFROM pcards\nWHERE Year = 2014\n  AND AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n  AND Amount >= 1000\n  AND Amount < 10000\n  AND Amount = CAST(Amount AS INTEGER)\n  AND CAST(Amount AS INTEGER) % 1000 = 0\nORDER BY\n    Vendor ASC,\n    FullName ASC"
+  },
+  {
+    "id": "III-5",
+    "title": "Question 5  |  Student-defined fraud test",
+    "question": "Identify positive 2014 OSU transactions from $4,900 through $5,000, inclusive, as a screen for purchases concentrated near the single-purchase limit. Return FullName, Amount, Vendor, TransactionDate, Description and MCC; sort by Amount descending and FullName ascending. The narrow range focuses follow-up, but purchases at or below the limit are not inherently improper.",
+    "sql": "SELECT\n    FullName,\n    Amount,\n    Vendor,\n    TransactionDate,\n    Description,\n    MCC\nFROM pcards\nWHERE Year = 2014\n  AND AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n  AND Amount > 0\n  AND Amount >= 4900\n  AND Amount <= 5000\nORDER BY\n    Amount DESC,\n    FullName ASC"
+  },
+  {
+    "id": "III-6",
+    "title": "Question 6  |  Student-defined fraud test",
+    "question": "Identify employee-vendor-amount combinations with at least three positive transactions in 2014. Return FullName, Vendor, Amount and TransactionCount; sort by count descending, then employee and vendor ascending. Requiring three occurrences reduces isolated matches. Unlike Question 2, this test does not require the same date and can identify recurring fixed-price charges.",
+    "sql": "SELECT\n    FullName,\n    Vendor,\n    Amount,\n    COUNT(*) AS TransactionCount\nFROM pcards\nWHERE Year = 2014\n  AND AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n  AND Amount > 0\nGROUP BY\n    FullName,\n    Vendor,\n    Amount\nHAVING COUNT(*) >= 3\nORDER BY\n    TransactionCount DESC,\n    FullName ASC,\n    Vendor ASC"
+  },
+  {
+    "id": "III-7",
+    "title": "Question 7  |  Student-defined fraud test",
+    "question": "Identify employee-vendor relationships involving at least 20 positive transactions in 2014, regardless of amount. Return FullName, Vendor, TransactionCount and TotalAmount; sort by count descending and total amount descending. The threshold focuses on sustained purchasing relationships; frequency must be assessed in light of the employee’s role and purchasing needs.",
+    "sql": "SELECT\n    FullName,\n    Vendor,\n    COUNT(*) AS TransactionCount,\n    ROUND(SUM(Amount), 2) AS TotalAmount\nFROM pcards\nWHERE Year = 2014\n  AND AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n  AND Amount > 0\nGROUP BY\n    FullName,\n    Vendor\nHAVING COUNT(*) >= 20\nORDER BY\n    TransactionCount DESC,\n    TotalAmount DESC"
+  },
+  {
+    "id": "III-8",
+    "title": "Question 8  |  Student-defined fraud test",
+    "question": "Identify negative 2014 OSU transactions for which the same employee and vendor have no positive transaction of the exact opposite amount in the 2014 OSU data. Return FullName, Vendor, Amount, TransactionDate, Description and MCC, ordered by absolute Amount descending. Matching both employee and vendor makes the screen more specific, but does not resolve partial credits or purchases outside the year.",
+    "sql": "SELECT\n    n.FullName,\n    n.Vendor,\n    n.Amount,\n    n.TransactionDate,\n    n.Description,\n    n.MCC\nFROM pcards AS n\nWHERE n.Year = 2014\n  AND n.AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n  AND n.Amount < 0\n  AND NOT EXISTS (\n      SELECT 1\n      FROM pcards AS p\n      WHERE p.Year = 2014\n        AND p.AgencyName = 'OKLAHOMA STATE UNIVERSITY'\n        AND p.FullName = n.FullName\n        AND p.Vendor = n.Vendor\n        AND p.Amount = -n.Amount\n        AND p.Amount > 0\n  )\nORDER BY ABS(n.Amount) DESC"
+  }
+]
