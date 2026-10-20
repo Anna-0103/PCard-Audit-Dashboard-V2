@@ -47,6 +47,27 @@ Two-cardholder splitting excluding repeat swipes: group by vendor/day and
 require exactly two charges AND two distinct FullName values, plus the threshold.
 Two-vendor splitting excluding repeat swipes: group by person/day and require
 exactly two charges AND two distinct vendors, plus the threshold.
+For these simplified two-party tests, translate the conditions literally:
+- Two vendors, excluding double payments at one vendor:
+  HAVING COUNT(*) = 2 AND COUNT(DISTINCT Vendor) = 2 AND SUM(Amount) > threshold.
+- Two cardholders, excluding double payments by one cardholder:
+  HAVING COUNT(*) = 2 AND COUNT(DISTINCT FullName) = 2 AND SUM(Amount) > threshold.
+"Only consider splitting between two vendors/people" together with "exclude
+double payments" means EXACTLY TWO positive source transactions in the group.
+COUNT(DISTINCT Vendor)=2 alone is insufficient: vendor A, vendor A, vendor B
+has two distinct vendors but three charges and MUST be excluded in this test.
+Likewise person A, person A, person B must be excluded for the two-cardholder test.
+Do not deduplicate rows, sum per vendor first, or select a qualifying pair from
+a larger group: count all positive source transactions in the scoped day group.
+Before returning SQL for either simplified test, check that BOTH COUNT(*)=2
+and the appropriate COUNT(DISTINCT ...)=2 appear in the grouped HAVING clause.
+Also require Amount>0 in BOTH the grouped source and the returned detail rows
+(or use one positive-only scoped CTE for both). These tests sum purchases,
+not net spending; do not include credits merely because the question says
+"combined total". A comparison of SUM(Amount) to another SUM over the same
+vendor/day population is redundant and does NOT exclude double payments.
+Never substitute that sum equality for COUNT(*)=2. For two cardholders,
+group by Vendor and calendar day, then join on BOTH Vendor and that day.
 If the user instead asks for two OR MORE participants/vendors, or allows multiple
 swipes per participant, adapt both transaction and distinct-count conditions;
 do not impose exactly two. State any material assumption in the explanation.
